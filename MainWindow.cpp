@@ -58,9 +58,9 @@ void MainWindow::createControlPanel()
     // Widget para os controles
     QWidget *controlPanel = new QWidget(this);
     ui->controlPanel = controlPanel;
-    QVBoxLayout *layout = new QVBoxLayout(controlPanel);
+    QVBoxLayout *mainLayout = new QVBoxLayout(controlPanel);
 
-    // --- Window Level ---
+    // ==================== Primeira linha: Window Level ====================
     QHBoxLayout *levelLayout = new QHBoxLayout();
     labelWindowLevel = new QLabel("WL: 0", this);
     labelWindowLevel->setMinimumWidth(80);
@@ -74,7 +74,7 @@ void MainWindow::createControlPanel()
     levelLayout->addWidget(labelWindowLevel);
     levelLayout->addStretch();
 
-    // --- Window Width ---
+    // ==================== Segunda linha: Window Width ====================
     QHBoxLayout *widthLayout = new QHBoxLayout();
     labelWindowWidth = new QLabel("WW: 400", this);
     labelWindowWidth->setMinimumWidth(80);
@@ -88,22 +88,66 @@ void MainWindow::createControlPanel()
     widthLayout->addWidget(labelWindowWidth);
     widthLayout->addStretch();
 
-    // --- Botão Reset ---
-    QPushButton *resetButton = new QPushButton("Reset", this);
-    resetButton->setMaximumWidth(100);
+    // ==================== Terceira linha: Reset WL/WW e Zoom ====================
+    QHBoxLayout *buttonsLayout = new QHBoxLayout();
+    
+    // Reset WL/WW button
+    resetWLWWButton = new QPushButton("Reset WL/WW", this);
+    resetWLWWButton->setMaximumWidth(120);
+    
+    buttonsLayout->addWidget(resetWLWWButton);
+    buttonsLayout->addSpacing(30);
+    
+    // Zoom controls
+    QPushButton *zoomInButton = new QPushButton("Zoom +", this);
+    zoomInButton->setMaximumWidth(80);
+    
+    QPushButton *zoomOutButton = new QPushButton("Zoom -", this);
+    zoomOutButton->setMaximumWidth(80);
+    
+    labelZoom = new QLabel("Zoom: 100%", this);
+    labelZoom->setMinimumWidth(100);
+    labelZoom->setAlignment(Qt::AlignCenter);
+    
+    QPushButton *resetZoomButton = new QPushButton("Reset Zoom", this);
+    resetZoomButton->setMaximumWidth(100);
+    
+    buttonsLayout->addWidget(new QLabel("Zoom:", this));
+    buttonsLayout->addWidget(zoomInButton);
+    buttonsLayout->addWidget(zoomOutButton);
+    buttonsLayout->addWidget(labelZoom);
+    buttonsLayout->addWidget(resetZoomButton);
+    buttonsLayout->addStretch();
 
-    layout->addLayout(levelLayout);
-    layout->addLayout(widthLayout);
-    layout->addWidget(resetButton);
-    layout->setContentsMargins(10, 10, 10, 10);
+    mainLayout->addLayout(levelLayout);
+    mainLayout->addLayout(widthLayout);
+    mainLayout->addLayout(buttonsLayout);
+    mainLayout->setContentsMargins(10, 10, 10, 10);
 
-    // Conecta aos slots
+    // Conecta aos slots Window Level/Width
     connect(sliderWindowLevel, &QSlider::valueChanged, this, &MainWindow::onWindowLevelChanged);
     connect(sliderWindowWidth, &QSlider::valueChanged, this, &MainWindow::onWindowWidthChanged);
-    connect(resetButton, &QPushButton::clicked, this, [this]() {
+    connect(resetWLWWButton, &QPushButton::clicked, this, [this]() {
+        sliderWindowLevel->blockSignals(true);
+        sliderWindowWidth->blockSignals(true);
+        
         sliderWindowLevel->setValue(defaultWindowLevel);
         sliderWindowWidth->setValue(defaultWindowWidth);
+        
+        sliderWindowLevel->blockSignals(false);
+        sliderWindowWidth->blockSignals(false);
+        
+        windowLevel = defaultWindowLevel;
+        windowWidth = defaultWindowWidth;
+        labelWindowLevel->setText(QString("WL: %1").arg(windowLevel));
+        labelWindowWidth->setText(QString("WW: %1").arg(windowWidth));
+        updateDisplay();
     });
+
+    // Conecta aos slots de Zoom
+    connect(zoomInButton, &QPushButton::clicked, this, &MainWindow::onZoomIn);
+    connect(zoomOutButton, &QPushButton::clicked, this, &MainWindow::onZoomOut);
+    connect(resetZoomButton, &QPushButton::clicked, this, &MainWindow::onResetZoom);
 }
 
 MainWindow::~MainWindow()
@@ -122,7 +166,7 @@ void MainWindow::loadDicom(const QString &filename)
     OFCondition status = file.loadFile(filename.toStdString().c_str());
 
     if (!status.good()) {
-        QMessageBox::critical(this, "Erro", "Arquivo DICOM inválido.");
+        QMessageBox::critical(this, "Error", "The selected file is not a valid DICOM file");
         return;
     }
 
@@ -165,6 +209,8 @@ void MainWindow::loadDicom(const QString &filename)
     // Definir valores padrão ANTES de atualizar os sliders
     defaultWindowLevel = windowLevel;
     defaultWindowWidth = windowWidth > 0 ? windowWidth : 400;
+    zoomFactor = 1.0;
+    defaultZoomFactor = 1.0;
 
     // Atualizar sliders com valores padrão
     sliderWindowLevel->blockSignals(true);
@@ -176,21 +222,59 @@ void MainWindow::loadDicom(const QString &filename)
     sliderWindowLevel->blockSignals(false);
     sliderWindowWidth->blockSignals(false);
 
+    updateZoomLabel();
     updateDisplay();
 }
 
 void MainWindow::onWindowLevelChanged(int value)
 {
     windowLevel = value;
-    labelWindowLevel->setText(QString("Window Level: %1").arg(windowLevel));
+    labelWindowLevel->setText(QString("WL: %1").arg(windowLevel));
     updateDisplay();
 }
 
 void MainWindow::onWindowWidthChanged(int value)
 {
     windowWidth = value;
-    labelWindowWidth->setText(QString("Window Width: %1").arg(windowWidth));
+    labelWindowWidth->setText(QString("WW: %1").arg(windowWidth));
     updateDisplay();
+}
+
+void MainWindow::onZoomIn()
+{
+    if (zoomFactor < maxZoom) {
+        zoomFactor += zoomStep;
+        if (zoomFactor > maxZoom) {
+            zoomFactor = maxZoom;
+        }
+        updateZoomLabel();
+        updateDisplay();
+    }
+}
+
+void MainWindow::onZoomOut()
+{
+    if (zoomFactor > minZoom) {
+        zoomFactor -= zoomStep;
+        if (zoomFactor < minZoom) {
+            zoomFactor = minZoom;
+        }
+        updateZoomLabel();
+        updateDisplay();
+    }
+}
+
+void MainWindow::onResetZoom()
+{
+    zoomFactor = defaultZoomFactor;
+    updateZoomLabel();
+    updateDisplay();
+}
+
+void MainWindow::updateZoomLabel()
+{
+    int percentage = static_cast<int>(zoomFactor * 100);
+    labelZoom->setText(QString("Zoom: %1%").arg(percentage));
 }
 
 void MainWindow::updateDisplay()
@@ -248,8 +332,14 @@ void MainWindow::updateDisplay()
 
     painter.end();
 
-    // Exibe na resolução original
-    imageLabel->setPixmap(QPixmap::fromImage(overlay));
+    // Aplicar zoom
+    int scaledWidth = static_cast<int>(overlay.width() * zoomFactor);
+    int scaledHeight = static_cast<int>(overlay.height() * zoomFactor);
+    QPixmap pixmap = QPixmap::fromImage(overlay);
+    pixmap = pixmap.scaledToWidth(scaledWidth, Qt::SmoothTransformation);
+
+    // Exibe
+    imageLabel->setPixmap(pixmap);
     imageLabel->adjustSize();
 }
 

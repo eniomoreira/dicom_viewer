@@ -6,6 +6,7 @@
 #include <QScrollArea>
 #include <QLabel>
 #include <QSlider>
+#include <QPushButton>
 #include <dcmtk/dcmimgle/dcmimage.h>
 
 QT_BEGIN_NAMESPACE
@@ -28,10 +29,14 @@ protected:
 private slots:
     void onWindowLevelChanged(int value);
     void onWindowWidthChanged(int value);
+    void onZoomIn();
+    void onZoomOut();
+    void onResetZoom();
 
 private:
     void updateDisplay();
     void createControlPanel();
+    void updateZoomLabel();
 
     Ui::MainWindow *ui;
 
@@ -41,11 +46,12 @@ private:
     QImage dicomImage;
     QString currentFile;
     
-    // Controles
+    // Controles Window Level/Width
     QSlider *sliderWindowLevel;
     QSlider *sliderWindowWidth;
     QLabel *labelWindowLevel;
     QLabel *labelWindowWidth;
+    QPushButton *resetWLWWButton;
 
     // Metadados
     int rows = 0;
@@ -57,6 +63,14 @@ private:
     int defaultWindowLevel = 0;
     QString photometric;
     QString modality;
+    
+    // Zoom
+    double zoomFactor = 1.0;
+    double defaultZoomFactor = 1.0;
+    const double zoomStep = 0.1;
+    const double minZoom = 0.1;
+    const double maxZoom = 5.0;
+    QLabel *labelZoom;
     
     // Imagem original
     DicomImage *currentDicomImage = nullptr;
